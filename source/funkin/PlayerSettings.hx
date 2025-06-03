@@ -5,6 +5,7 @@ import funkin.input.Controls;
 import funkin.input.PreciseInputManager;
 import flixel.input.gamepad.FlxGamepad;
 import flixel.util.FlxSignal.FlxTypedSignal;
+import flixel.FlxG;
 
 /**
  * A core class which represents the current player(s) and their controls and other configuration.
@@ -72,6 +73,10 @@ class PlayerSettings
    */
   public static function reset():Void
   {
+    // Remove any lingering callbacks before clearing players to avoid
+    // accumulating duplicate listeners on reinitialization.
+    FlxG.gamepads.deviceConnected.remove(onGamepadAdded);
+
     player1 = null;
     player2 = null;
     numPlayers = 0;
