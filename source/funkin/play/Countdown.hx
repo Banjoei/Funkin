@@ -9,6 +9,9 @@ import funkin.util.EaseUtil;
 import funkin.audio.FunkinSound;
 import funkin.data.notestyle.NoteStyleRegistry;
 import funkin.play.notes.notestyle.NoteStyle;
+import flixel.group.FlxSpriteGroup.FlxTypedSpriteGroup;
+import funkin.graphics.FunkinSprite;
+import haxe.ds.EnumValueMap;
 
 class Countdown
 {
@@ -36,6 +39,24 @@ class Countdown
   static var fallbackNoteStyle:Null<NoteStyle>;
 
   /**
+   * Group containing all countdown sprites currently on screen.
+   * Scripts can access this to modify the entire countdown at once.
+   */
+  public static var spriteGroup:FlxTypedSpriteGroup<FunkinSprite> = null;
+
+  /**
+   * The most recently created countdown sprite.
+   * Useful for modifying the sprite for the current step.
+   */
+  public static var currentSprite:FunkinSprite = null;
+
+  /**
+   * Individual sprites for each countdown step.
+   * Entries will be null once the sprite for a step is destroyed.
+   */
+  public static var stepSprites:EnumValueMap<CountdownStep, FunkinSprite> = null;
+
+  /**
    * The currently running countdown. This will be null if there is no countdown running.
    */
   static var countdownTimer:FlxTimer = null;
@@ -57,6 +78,21 @@ class Countdown
 
     // Stop any existing countdown.
     stopCountdown();
+
+    // Initialize or clear the countdown sprite group.
+    if (spriteGroup == null)
+    {
+      spriteGroup = new FlxTypedSpriteGroup<FunkinSprite>();
+      spriteGroup.cameras = [PlayState.instance.camHUD];
+      PlayState.instance.add(spriteGroup);
+    }
+    else
+    {
+      spriteGroup.clear();
+    }
+
+    stepSprites = new EnumValueMap<CountdownStep, FunkinSprite>();
+    currentSprite = null;
 
     PlayState.instance.isInCountdown = true;
     Conductor.instance.update(PlayState.instance.startTimestamp + Conductor.instance.beatLengthMs * -5);
@@ -81,7 +117,7 @@ class Countdown
       // PlayState.instance.dispatchEvent(new SongTimeScriptEvent(SONG_BEAT_HIT, 0, 0));
 
       // Countdown graphic.
-      showCountdownGraphic(countdownStep);
+      currentSprite = showCountdownGraphic(countdownStep);
 
       // Countdown sound.
       playCountdownSound(countdownStep);
@@ -168,6 +204,15 @@ class Countdown
       countdownTimer.destroy();
       countdownTimer = null;
     }
+
+    if (spriteGroup != null)
+    {
+      if (PlayState.instance != null) PlayState.instance.remove(spriteGroup);
+      spriteGroup.destroy();
+      spriteGroup = null;
+    }
+    stepSprites = null;
+    currentSprite = null;
   }
 
   /**
@@ -198,6 +243,9 @@ class Countdown
   public static function reset()
   {
     noteStyle = null;
+    spriteGroup = null;
+    stepSprites = null;
+    currentSprite = null;
   }
 
   /**
@@ -218,12 +266,12 @@ class Countdown
   /**
    * Retrieves the graphic to use for this step of the countdown.
    */
-  public static function showCountdownGraphic(index:CountdownStep):Void
+  public static function showCountdownGraphic(index:CountdownStep):FunkinSprite
   {
     fetchNoteStyle();
 
     var countdownSprite = noteStyle.buildCountdownSprite(index);
-    if (countdownSprite == null) return;
+    if (countdownSprite == null) return null;
 
     var fadeEase = FlxEase.cubeInOut;
     if (noteStyle.isCountdownSpritePixel(index)) fadeEase = EaseUtil.stepped(8);
@@ -233,17 +281,28 @@ class Countdown
       {
         ease: fadeEase,
         onComplete: function(twn:FlxTween) {
+          if (spriteGroup != null) spriteGroup.remove(countdownSprite, true);
+          if (stepSprites != null) stepSprites.remove(index);
           countdownSprite.destroy();
         }
       });
 
     countdownSprite.cameras = [PlayState.instance.camHUD];
-    PlayState.instance.add(countdownSprite);
+    if (spriteGroup == null)
+    {
+      spriteGroup = new FlxTypedSpriteGroup<FunkinSprite>();
+      spriteGroup.cameras = [PlayState.instance.camHUD];
+      PlayState.instance.add(spriteGroup);
+    }
+    spriteGroup.add(countdownSprite);
+    if (stepSprites != null) stepSprites.set(index, countdownSprite);
     countdownSprite.screenCenter();
 
     var offsets = noteStyle.getCountdownSpriteOffsets(index);
     countdownSprite.x += offsets[0];
     countdownSprite.y += offsets[1];
+
+    return countdownSprite;
   }
 
   /**
